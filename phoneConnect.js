@@ -18,32 +18,20 @@
 // =====================================================================
 
 const PEERJS_CONFIG = {
-  // Use the free public PeerJS cloud broker for signalling. ICE servers
-  // are STUN + free public TURN relays (Metered OpenRelay) so cross-network
-  // connections (e.g. phone on cellular, laptop on Wi-Fi) can still
-  // negotiate. Without TURN, only same-LAN typically works.
+  // Free public PeerJS broker handles signalling.
+  // ICE servers: Google STUN + Metered.ca free TURN tier (500 MB/month,
+  // ambiantai project on iulianmalovanyi@cthesigns.net's account). TURN is
+  // required for cross-network connections (e.g. phone on cellular →
+  // laptop on Wi-Fi behind NAT). The 5 URLs cover all firewall scenarios:
+  // STUN, plain UDP, UDP→TCP fallback, TLS, and TLS+TCP.
   config: {
     iceServers: [
       { urls: 'stun:stun.l.google.com:19302' },
-      { urls: 'stun:stun1.l.google.com:19302' },
-      { urls: 'stun:global.stun.twilio.com:3478' },
-      {
-        urls: [
-          'turn:openrelay.metered.ca:80',
-          'turn:openrelay.metered.ca:443',
-          'turn:openrelay.metered.ca:443?transport=tcp'
-        ],
-        username: 'openrelayproject',
-        credential: 'openrelayproject'
-      },
-      {
-        urls: [
-          'turn:relay1.expressturn.com:3478',
-          'turn:relay1.expressturn.com:3478?transport=tcp'
-        ],
-        username: 'efJBIBF6IRZE9YGJLW',
-        credential: 'tcXVQHCqYr08Yz4n'
-      }
+      { urls: 'stun:stun.relay.metered.ca:80' },
+      { urls: 'turn:global.relay.metered.ca:80',                  username: '3d1288cb0e5a2ec1be3f0fc9', credential: 'Ijwhr4T7v2xVkexd' },
+      { urls: 'turn:global.relay.metered.ca:80?transport=tcp',    username: '3d1288cb0e5a2ec1be3f0fc9', credential: 'Ijwhr4T7v2xVkexd' },
+      { urls: 'turn:global.relay.metered.ca:443',                 username: '3d1288cb0e5a2ec1be3f0fc9', credential: 'Ijwhr4T7v2xVkexd' },
+      { urls: 'turns:global.relay.metered.ca:443?transport=tcp',  username: '3d1288cb0e5a2ec1be3f0fc9', credential: 'Ijwhr4T7v2xVkexd' }
     ]
   },
   debug: 2
