@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="en-GB">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>C the Signs — Ambient AI (PoC)</title>
+  <link rel="stylesheet" href="styles.css" />
+  <!-- PeerJS — free WebRTC signalling broker. Used for phone-as-microphone. -->
+  <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+  <!-- QRious — small QR-code generator for canvas. Renders the connection
+       QR that the phone scans to open the mic-mode page. -->
+  <script src="https://cdn.jsdelivr.net/npm/qrious@4.0.2/dist/qrious.min.js"></script>
+</head>
+<body>
+  <!-- Desktop backdrop to mimic the real screenshots -->
+  <div class="desktop-bg"></div>
+
+  <!-- SVG icon symbols (defined once, reused via <use>) -->
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <defs>
+      <symbol id="ic-person" viewBox="0 0 24 24">
+        <path fill="currentColor" d="M12 12a4.5 4.5 0 1 0 0-9 4.5 4.5 0 0 0 0 9Zm0 2c-3.6 0-7.5 1.8-7.5 5.25V21h15v-1.75C19.5 15.8 15.6 14 12 14Z"/>
+      </symbol>
+      <symbol id="ic-window" viewBox="0 0 24 24">
+        <path fill="currentColor" d="M3.5 5.5h17v13h-17v-13Zm0 3.5h17M6 7.25a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" fill="none"/>
+      </symbol>
+      <symbol id="ic-inbox" viewBox="0 0 24 24">
+        <path fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" d="M4 5h16l-1.5 9H5.5L4 5Zm0 9h5l1 2h4l1-2h5v5H4v-5Z"/>
+      </symbol>
+      <symbol id="ic-butterfly" viewBox="0 0 24 24">
+        <path fill="currentColor" d="M12 4c-1.3 2.1-4.1 3.6-7 3.6 0 3.3 2.6 6.4 7 8.4 4.4-2 7-5.1 7-8.4-2.9 0-5.7-1.5-7-3.6Zm0 13.6c-1.3 1-2.6 1.9-3.6 2.4 1.5-.2 2.7-.7 3.6-1.3.9.6 2.1 1.1 3.6 1.3-1-.5-2.3-1.4-3.6-2.4Z"/>
+      </symbol>
+      <symbol id="ic-grip" viewBox="0 0 24 24">
+        <g fill="currentColor">
+          <circle cx="9" cy="6" r="1.1"/><circle cx="15" cy="6" r="1.1"/>
+          <circle cx="9" cy="12" r="1.1"/><circle cx="15" cy="12" r="1.1"/>
+          <circle cx="9" cy="18" r="1.1"/><circle cx="15" cy="18" r="1.1"/>
+        </g>
+      </symbol>
+      <symbol id="ic-clogo" viewBox="0 0 24 24">
+        <path fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" d="M17 7.5A6.5 6.5 0 1 0 17 16.5"/>
+      </symbol>
+      <symbol id="ic-mic" viewBox="0 0 24 24">
+        <path fill="currentColor" d="M12 14a3 3 0 0 0 3-3V6a3 3 0 1 0-6 0v5a3 3 0 0 0 3 3Zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.92V21h2v-3.08A7 7 0 0 0 19 11h-2Z"/>
+      </symbol>
+      <symbol id="ic-mic-off" viewBox="0 0 24 24">
+        <path fill="currentColor" d="M3.3 4.7 4.7 3.3l16 16-1.4 1.4-3.6-3.6A7 7 0 0 1 13 17.92V21h-2v-3.08A7 7 0 0 1 5 11h2a5 5 0 0 0 7.46 4.36L13 13.9A3 3 0 0 1 9 11V8.1L3.3 4.7ZM12 3a3 3 0 0 1 3 3v5c0 .27-.04.53-.1.78L9.22 5.1A3 3 0 0 1 12 3Z"/>
+      </symbol>
+      <symbol id="ic-pause" viewBox="0 0 24 24">
+        <path fill="currentColor" d="M7 5h3v14H7zM14 5h3v14h-3z"/>
+      </symbol>
+      <symbol id="ic-play" viewBox="0 0 24 24">
+        <path fill="currentColor" d="M8 5v14l11-7z"/>
+      </symbol>
+      <symbol id="ic-stop" viewBox="0 0 24 24">
+        <rect x="6" y="6" width="12" height="12" rx="1.5" fill="currentColor"/>
+      </symbol>
+      <symbol id="ic-info" viewBox="0 0 24 24">
+        <path fill="currentColor" d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20Zm0 4a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3Zm1.25 12h-2.5v-7.5h2.5V18Z"/>
+      </symbol>
+      <symbol id="ic-user-plus" viewBox="0 0 24 24">
+        <path fill="currentColor" d="M9 12a4.5 4.5 0 1 0 0-9 4.5 4.5 0 0 0 0 9Zm0 2c-3.6 0-7.5 1.8-7.5 5.25V21h12v-1.75c0-1.05.36-2 .98-2.78A11.4 11.4 0 0 0 9 14Zm10 1v-3h-2v3h-3v2h3v3h2v-3h3v-2h-3Z"/>
+      </symbol>
+      <symbol id="ic-phone" viewBox="0 0 24 24">
+        <path fill="currentColor" d="M7 2.5h10c.7 0 1.25.56 1.25 1.25v16.5c0 .69-.56 1.25-1.25 1.25H7c-.7 0-1.25-.56-1.25-1.25V3.75c0-.69.56-1.25 1.25-1.25Zm0 1.5v15h10V4H7Zm5 14a1 1 0 1 1 0 2 1 1 0 0 1 0-2Z"/>
+      </symbol>
+      <symbol id="ic-sparkles" viewBox="0 0 24 24">
+        <path fill="currentColor" d="m12 3 1.5 4 4 1.5-4 1.5L12 14l-1.5-4-4-1.5 4-1.5L12 3Zm6 9 .9 2.4 2.4.9-2.4.9-.9 2.4-.9-2.4-2.4-.9 2.4-.9.9-2.4Z"/>
+      </symbol>
+      <symbol id="ic-close" viewBox="0 0 24 24">
+        <path fill="currentColor" d="M19 6.4 17.6 5 12 10.6 6.4 5 5 6.4 10.6 12 5 17.6 6.4 19 12 13.4 17.6 19 19 17.6 13.4 12 19 6.4Z"/>
+      </symbol>
+      <symbol id="ic-search" viewBox="0 0 24 24">
+        <path fill="currentColor" d="M10 4a6 6 0 1 1-4.2 10.3l-3.5 3.5-1.4-1.4 3.5-3.5A6 6 0 0 1 10 4Zm0 2a4 4 0 1 0 0 8 4 4 0 0 0 0-8Z"/>
+      </symbol>
+      <symbol id="ic-chevron" viewBox="0 0 24 24">
+        <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="m9 6 6 6-6 6"/>
+      </symbol>
+    </defs>
+  </svg>
+
+  <!-- ============================== TOOLBAR ============================== -->
+  <div class="toolbar-wrap" id="toolbarWrap" role="region" aria-label="C the Signs toolbar">
+
+    <!-- PoC: only the expanded (4-button) toolbar is shown; the collapsed
+         1-button mode is not used in this PoC and will be considered separately. -->
+    <div class="toolbar toolbar--expanded" id="toolbarExpanded">
+      <button class="tb-btn" id="tbPerson" aria-label="Patient" data-button="person">
+        <svg class="ic"><use href="#ic-person"/></svg>
+        <span class="tb-dot" id="tbDot" aria-hidden="true"></span>
+        <span class="tb-badge" id="tbBadge" hidden>0</span>
+      </button>
+      <button class="tb-btn" aria-label="Window"><svg class="ic"><use href="#ic-window"/></svg></button>
+      <button class="tb-btn" aria-label="Inbox"><svg class="ic"><use href="#ic-inbox"/></svg></button>
+      <button class="tb-btn" aria-label="C the Signs"><svg class="ic"><use href="#ic-butterfly"/></svg></button>
+
+      <!-- Ambient AI controls: small buttons grouped together -->
+      <div class="tb-ai" role="group" aria-label="Ambient AI controls">
+        <button class="tb-btn tb-btn--sm" id="tbStart" aria-label="Start listening" title="Start listening">
+          <svg class="ic ic--sm"><use href="#ic-mic"/></svg>
+        </button>
+        <button class="tb-btn tb-btn--sm" id="tbPause" aria-label="Pause listening" title="Pause listening" disabled>
+          <svg class="ic ic--sm"><use href="#ic-pause"/></svg>
+        </button>
+        <button class="tb-btn tb-btn--sm tb-btn--stop" id="tbStop" aria-label="Stop and reset" title="Stop & reset">
+          <svg class="ic ic--sm"><use href="#ic-stop"/></svg>
+        </button>
+        <button class="tb-btn tb-btn--sm tb-btn--phone" id="tbPhone" aria-label="Connect phone as microphone" title="Use phone as mic">
+          <svg class="ic ic--sm"><use href="#ic-phone"/></svg>
+        </button>
+      </div>
+
+      <div class="tb-grip" id="tbGrip" role="button" aria-label="Drag toolbar" title="Drag to move"><svg class="ic"><use href="#ic-grip"/></svg></div>
+    </div>
+
+    <!-- Listening status chip — visible whenever NOT idle.
+         Anchored next to the toolbar; always visible during listening or paused. -->
+    <div class="listen-chip" id="listenChip" hidden>
+      <span class="listen-chip-dot" id="listenChipDot" aria-hidden="true"></span>
+      <span class="listen-chip-label" id="listenChipLabel">Listening</span>
+    </div>
+
+    <!-- Notification card (anchored under person button) -->
+    <div class="notif" id="notif" hidden>
+      <div class="notif-arrow" aria-hidden="true"></div>
+      <div class="notif-body">
+        <div class="notif-badge" id="notifBadge">1</div>
+        <div class="notif-content">
+          <div class="notif-title" id="notifTitle">Risk factor detected</div>
+          <div class="notif-sub" id="notifSub">Lorem ipsum</div>
+          <div class="notif-actions">
+            <button class="link link--primary" id="notifRiskAssess">Risk assess</button>
+            <button class="link" id="notifDetails">Details</button>
+            <button class="link" id="notifHide">Hide</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================== AMBIENT AI UTILITY PILL ============================== -->
+  <!-- Slim pill — Start/Pause now live inside the toolbar. This pill only
+       carries developer-utility controls (transcript toggle, reset) plus the
+       feature label and STT status message. -->
+  <div class="status-pill" id="statusPill" role="region" aria-label="Ambient AI utility controls">
+    <div class="status-pill-row">
+      <span class="status-feature">
+        <svg class="ic ic--sm"><use href="#ic-sparkles"/></svg>
+        Ambient AI <span class="poc-tag">PoC</span>
+      </span>
+    </div>
+    <div class="status-pill-row status-pill-actions">
+      <button class="btn btn--ghost" id="btnTranscriptToggle">Show transcript</button>
+      <button class="btn btn--primary" id="btnNewPatient" title="Simulate opening a new patient record">
+        <svg class="ic ic--sm"><use href="#ic-user-plus"/></svg>
+        New patient open
+      </button>
+      <span class="info-wrap">
+        <button class="icon-btn info-btn" id="newPatientInfo" aria-label="What does this do?">
+          <svg class="ic ic--sm"><use href="#ic-info"/></svg>
+        </button>
+        <span class="info-tooltip" role="tooltip">
+          <strong>Simulation only.</strong>
+          In the production feature, listening starts automatically when a clinician opens a patient record whose appointment is today. This PoC simulates that trigger.
+          <br><br>
+          Click <em>New patient open</em> to begin a fresh session — any previous detections and transcript are cleared.
+        </span>
+      </span>
+    </div>
+    <div class="status-pill-note" id="sttStatus">Web Speech API ready · Click the mic button on the toolbar to begin</div>
+  </div>
+
+  <!-- ============================== TRANSCRIPT PANEL ============================== -->
+  <aside class="transcript-panel" id="transcriptPanel" hidden aria-label="Live transcript (PoC only)">
+    <div class="transcript-head">
+      <strong>Live transcript</strong>
+      <span class="muted">PoC only — production feature will not display this</span>
+      <button class="icon-btn" id="transcriptClose" aria-label="Hide transcript"><svg class="ic ic--sm"><use href="#ic-close"/></svg></button>
+    </div>
+    <div class="transcript-body" id="transcriptBody"></div>
+    <!-- Mock fallback input -->
+    <div class="transcript-fallback" id="transcriptFallback" hidden>
+      <label for="mockInput"><strong>Mock input</strong> (Web Speech API unavailable — type to simulate)</label>
+      <textarea id="mockInput" rows="3" placeholder="Type a sentence and press Enter to send to the detector…"></textarea>
+    </div>
+  </aside>
+
+  <!-- ============================== TOAST ============================== -->
+  <div class="toast" id="toast" hidden></div>
+
+  <!-- ============================== DETAILS MODAL ============================== -->
+  <div class="modal-overlay" id="detailsOverlay" hidden>
+    <div class="modal modal--summary" role="dialog" aria-modal="true" aria-labelledby="summaryTitle">
+      <header class="patient-bar">
+        <span class="nhs-tag">NHS</span>
+        <span class="patient-id">123 456 7890</span>
+        <span class="patient-name"><span class="muted">Mr.</span> <strong>Willington, Albert</strong></span>
+        <span class="patient-meta-badge">M</span>
+        <span class="patient-meta">59yrs</span>
+        <span class="patient-meta">12 Nov 1967</span>
+        <button class="icon-btn icon-btn--light" id="detailsClose" aria-label="Close"><svg class="ic"><use href="#ic-close"/></svg></button>
+      </header>
+      <div class="modal-body">
+        <div class="summary-head">
+          <div class="summary-title-row">
+            <svg class="ic ic--sparkles"><use href="#ic-sparkles"/></svg>
+            <span class="eyebrow">RISK SUMMARY</span>
+          </div>
+          <h2 id="summaryTitle"><span id="summaryCount">0</span> cancer signals identified</h2>
+          <p class="summary-lede">We found factors mentioned during the consultation that may indicate cancer risk. Review the evidence, then confirm or edit the factors in risk assessment.</p>
+        </div>
+
+        <div class="summary-list" id="summaryList">
+          <!-- Cards injected by JS -->
+        </div>
+
+        <div class="summary-empty" id="summaryEmpty" hidden>
+          <p>No risk factors detected yet. Start listening, then speak about a simulated consultation.</p>
+        </div>
+
+        <footer class="modal-footer">
+          <button class="btn btn--primary btn--large" id="summaryProceed">
+            Start risk assessment <svg class="ic ic--sm"><use href="#ic-chevron"/></svg>
+          </button>
+        </footer>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================== RISK ASSESSMENT MODAL ============================== -->
+  <div class="modal-overlay" id="raOverlay" hidden>
+    <div class="modal modal--ra" role="dialog" aria-modal="true" aria-labelledby="raTitle">
+      <header class="patient-bar">
+        <svg class="ic ic--lg"><use href="#ic-butterfly"/></svg>
+        <span class="patient-name"><span class="muted">Mrs.</span> <strong>Stone, Emma</strong></span>
+        <span class="patient-meta">69yrs · 18 Jun 1955</span>
+        <span class="patient-meta">2 Dowgate Close, Spalding, PE11 1NG</span>
+        <span class="patient-meta">Berryland Surgery</span>
+        <span class="spacer"></span>
+        <span class="nhs-tag">NHS</span>
+        <span class="patient-id">271 212 7328</span>
+        <button class="icon-btn icon-btn--light" id="raClose" aria-label="Close"><svg class="ic"><use href="#ic-close"/></svg></button>
+      </header>
+
+      <div class="ra-body">
+        <h2 class="visually-hidden" id="raTitle">Risk assessment — select factors</h2>
+
+        <!-- Selected chips row -->
+        <div class="ra-selected-row" id="raSelectedRow">
+          <!-- Chips injected by JS -->
+          <span class="ra-empty-chips" id="raEmptyChips" hidden>No factors selected yet</span>
+        </div>
+
+        <!-- Search + proceed row -->
+        <div class="ra-toolbar">
+          <div class="ra-search">
+            <svg class="ic"><use href="#ic-search"/></svg>
+            <input id="raSearch" type="search" placeholder="Type factors, symptoms, sign, or investigations" autocomplete="off" />
+          </div>
+          <button class="btn btn--primary btn--large" id="raProceed">Proceed <svg class="ic ic--sm"><use href="#ic-chevron"/></svg></button>
+        </div>
+
+        <!-- A–Z layout -->
+        <div class="ra-az-layout">
+          <nav class="ra-az-nav" id="raAzNav" aria-label="Jump to letter"></nav>
+          <div class="ra-az-list" id="raAzList"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================== PHONE CONNECTION MODAL ============================== -->
+  <div class="modal-overlay" id="phoneOverlay" hidden>
+    <div class="modal modal--phone" role="dialog" aria-modal="true" aria-labelledby="phoneTitle">
+      <header class="patient-bar patient-bar--simple">
+        <svg class="ic ic--lg"><use href="#ic-phone"/></svg>
+        <strong>Use your phone as microphone</strong>
+        <span class="spacer"></span>
+        <button class="icon-btn icon-btn--light" id="phoneClose" aria-label="Close"><svg class="ic"><use href="#ic-close"/></svg></button>
+      </header>
+      <div class="modal-body phone-body">
+        <h2 id="phoneTitle" class="visually-hidden">Connect phone</h2>
+        <ol class="phone-steps">
+          <li>Open the camera on your phone and scan the QR code below.</li>
+          <li>Tap the link that appears. The phone opens a small microphone page.</li>
+          <li>Tap <em>Start listening</em> on the phone. Place the phone where you want to capture audio.</li>
+          <li>Your phone's transcription streams to this laptop — detections appear here.</li>
+        </ol>
+        <div class="phone-qr-wrap">
+          <canvas id="phoneQrCanvas" class="phone-qr"></canvas>
+          <div class="phone-status">
+            <div class="phone-status-row" id="phoneStatusRow">
+              <span class="dot dot--idle" id="phoneStatusDot"></span>
+              <span class="phone-status-label" id="phoneStatusLabel">Waiting for phone to connect…</span>
+            </div>
+            <div class="phone-url">
+              <span class="muted">Link:</span>
+              <code id="phoneUrl">—</code>
+              <button class="btn btn--ghost btn--xs" id="phoneCopyUrl">Copy</button>
+            </div>
+            <p class="muted phone-tip">
+              Phone needs to be on Chrome (Android) or Safari (iOS) and have internet access. The link works on the same Wi-Fi <em>or</em> over the internet.
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================== MOBILE MIC MODE ============================== -->
+  <!-- Shown only when the URL contains ?mic=<peerid>. The phone visits the same
+       page, but in mic-mode all the desktop UI is hidden and this minimal
+       capture interface is shown instead. -->
+  <div class="mobile-mic" id="mobileMic" hidden>
+    <div class="mm-header">
+      <svg class="ic ic--lg"><use href="#ic-clogo"/></svg>
+      <strong>C the Signs — Ambient AI</strong>
+    </div>
+    <div class="mm-status" id="mmStatus">
+      <span class="dot dot--idle" id="mmStatusDot"></span>
+      <span id="mmStatusLabel">Connecting to laptop…</span>
+    </div>
+    <div class="mm-mic-area">
+      <button class="mm-mic-btn" id="mmMicBtn" disabled>
+        <svg class="ic ic--xl"><use href="#ic-mic"/></svg>
+        <span id="mmMicLabel">Connecting…</span>
+      </button>
+    </div>
+    <div class="mm-transcript" id="mmTranscript" aria-live="polite">
+      <span class="muted">Transcript appears here as you speak.</span>
+    </div>
+    <p class="mm-footnote">
+      Audio stays on this phone. Only the transcribed text is sent to the laptop.
+    </p>
+  </div>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>

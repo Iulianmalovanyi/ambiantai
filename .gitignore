@@ -1,0 +1,20 @@
+# Internal product docs — not for the public repo
+brief.md
+prd.md
+jira.md
+
+# Unused / superseded modules
+semantic.js
+
+# OS noise
+.DS_Store
+Thumbs.db
+
+# Editor noise
+.vscode/
+.idea/
+
+# Build/output (none right now, but future-proof)
+node_modules/
+dist/
+build/
