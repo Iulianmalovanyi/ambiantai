@@ -27,11 +27,13 @@ const OLLAMA_TAGS_URL = `${OLLAMA_BASE}/api/tags`;
 const MODEL_NAME = 'qwen2.5:7b';
 const REQUEST_TIMEOUT_MS = 20000;
 
-// Extra headers — ngrok injects the skip-browser-warning header itself
-// (via --request-header-add when the tunnel is started), so we don't
-// need to send it from the browser. Sending custom headers would force
-// a CORS preflight that Ollama's response doesn't allow.
-const EXTRA_HEADERS = {};
+// Extra headers — ngrok free tier shows its HTML warning page to anything
+// that looks like a browser. The `ngrok-skip-browser-warning` header is
+// what bypasses that page (must come from the actual request, not
+// server-injected). The tunnel is configured with permissive CORS
+// (Access-Control-Allow-Headers: *) so this custom header doesn't break
+// the preflight.
+const EXTRA_HEADERS = USE_LOCAL_LLM ? {} : { 'ngrok-skip-browser-warning': '1' };
 
 let factorList = []; // [{ name, hint }] — passed to the model in the prompt
 let ready = false;
