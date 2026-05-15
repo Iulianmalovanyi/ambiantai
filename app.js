@@ -9,7 +9,7 @@
 import { FACTORS } from './factors.js';
 import { ALIASES } from './aliases.js';
 import { POC_EXTRA_FACTORS, POC_EXTRA_ALIASES } from './poc-extras.js';
-import { probeOllama, initLocalLlm, localLlmDetect, isLocalLlmReady } from './localLlm.js';
+import { probeOllama, initLocalLlm, localLlmDetect, isLocalLlmReady, translateToEnglish } from './localLlm.js';
 import { startLaptopPeer, startPhonePeer, buildPhoneUrl } from './phoneConnect.js';
 
 // =====================================================================
@@ -34,14 +34,16 @@ const state = {
   listening: false,           // true while STT is actively capturing
   hasEverStarted: false,      // true once the user has started at least once (controls chip visibility)
   recognition: null,          // SpeechRecognition instance
-  transcript: '',             // committed transcript
+  transcript: '',             // committed transcript (always in English after translation)
+  transcriptOriginal: '',     // original-language transcript (for display in transcript panel)
   interim: '',                // interim transcript
   detected: new Map(),        // canonicalName -> { factor, utterance, ts }
   recentUtterances: [],       // sliding window of last N final deltas — passed to LLM as context
   transcriptVisible: false,
   fallbackMode: false,        // true if Web Speech API not available
   notifVisible: false,
-  selectedFactorIds: new Set() // for RA modal
+  selectedFactorIds: new Set(), // for RA modal
+  lang: 'en-GB'               // STT language code (en-GB, es-ES, uk-UA)
 };
 const CONTEXT_WINDOW_SIZE = 3;
 
@@ -260,7 +262,7 @@ function initRecognition() {
   const r = new SR();
   r.continuous = true;
   r.interimResults = true;
-  r.lang = 'en-GB';
+  r.lang = state.lang;
   // Diagnostic event handlers — surface every state change to the UI so the
   // user can see exactly what the recogniser is doing.
   r.onstart = () => { sttStatus.textContent = 'Listening… waiting for speech.'; };
@@ -268,7 +270,7 @@ function initRecognition() {
   r.onspeechend = () => { sttStatus.textContent = 'Speech ended — processing…'; };
   r.onaudiostart = () => console.log('[STT] audio stream opened');
   r.onaudioend = () => console.log('[STT] audio stream closed');
-  r.onresult = (e) => {
+  r.onresult = async (e) => {
     let interim = '';
     let finalDelta = '';
     for (let i = e.resultIndex; i < e.results.length; i++) {
@@ -278,17 +280,26 @@ function initRecognition() {
     }
     state.interim = interim;
     if (finalDelta) {
-      const trimmedDelta = finalDelta.trim();
-      // Position of where this delta starts in the full transcript — used as
-      // the "matchIndex" for negation checking on the semantic side.
+      const rawDelta = finalDelta.trim();
+      // If patient speaks a non-English language, translate before detection
+      // so the alias matcher and detection prompts work as expected.
+      let englishDelta = rawDelta;
+      if (state.lang !== 'en-GB' && isLocalLlmReady()) {
+        sttStatus.textContent = `Translating from ${langName(state.lang)}…`;
+        englishDelta = await translateToEnglish(rawDelta);
+      }
+      // Track both the original (for display) and the English version (for detection)
+      state.transcriptOriginal += (state.transcriptOriginal ? ' ' : '') + rawDelta;
       const deltaStart = state.transcript.length + (state.transcript ? 1 : 0);
-      state.transcript += (state.transcript ? ' ' : '') + trimmedDelta;
+      state.transcript += (state.transcript ? ' ' : '') + englishDelta;
       const news = detect(state.transcript);
       if (news.length) onNewDetections(news);
-      sttStatus.textContent = `✓ Captured: "${trimmedDelta.slice(0, 70)}${trimmedDelta.length > 70 ? '…' : ''}"`;
-      // Fire-and-forget LLM detection on the new delta. Runs async so the UI
-      // updates immediately with alias matches; LLM matches land ~1–3s later.
-      runLocalLlm(trimmedDelta, deltaStart);
+      if (state.lang !== 'en-GB') {
+        sttStatus.textContent = `✓ "${rawDelta.slice(0, 35)}…" → "${englishDelta.slice(0, 35)}…"`;
+      } else {
+        sttStatus.textContent = `✓ Captured: "${englishDelta.slice(0, 70)}${englishDelta.length > 70 ? '…' : ''}"`;
+      }
+      runLocalLlm(englishDelta, deltaStart);
     } else if (interim) {
       sttStatus.textContent = `Hearing… "${interim.trim().slice(0, 70)}${interim.trim().length > 70 ? '…' : ''}"`;
     }
@@ -740,8 +751,13 @@ function showToast(msg, ms = 2400) {
 // =====================================================================
 // Reset
 // =====================================================================
+function langName(code) {
+  return { 'en-GB': 'English', 'es-ES': 'Spanish', 'uk-UA': 'Ukrainian' }[code] || code;
+}
+
 function resetAll() {
   state.transcript = '';
+  state.transcriptOriginal = '';
   state.interim = '';
   state.detected.clear();
   state.recentUtterances = [];
@@ -761,6 +777,26 @@ function resetAll() {
 // =====================================================================
 // Wire up event listeners
 // =====================================================================
+// Language picker — sets state.lang and updates the SpeechRecognition language.
+// Changing language mid-session forces a restart of the recogniser so the new
+// language code takes effect.
+const langPicker = document.getElementById('langPicker');
+if (langPicker) {
+  langPicker.addEventListener('change', () => {
+    state.lang = langPicker.value;
+    showToast(`Language: ${langName(state.lang)}`);
+    if (state.recognition) {
+      const wasListening = state.listening;
+      try { state.recognition.stop(); } catch (_) {}
+      state.recognition.lang = state.lang;
+      if (wasListening) {
+        // restart with new language
+        setTimeout(() => { try { state.recognition.start(); } catch (_) {} }, 200);
+      }
+    }
+  });
+}
+
 tbStart.addEventListener('click', startListening);
 tbPause.addEventListener('click', pauseListening);
 

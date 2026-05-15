@@ -79,6 +79,49 @@ export function isLocalLlmReady() { return ready; }
 export function getLastError() { return lastError; }
 
 /**
+ * Translate a transcript fragment to English using the local LLM.
+ * Used when the patient speaks a non-English language — translation
+ * runs before detection so the alias matcher and detection prompt
+ * (both English-tuned) work as normal.
+ * Returns the translated text, or the original on failure.
+ */
+export async function translateToEnglish(text) {
+  if (!ready) return text;
+  const trimmed = (text || '').trim();
+  if (!trimmed) return text;
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 12000);
+  try {
+    const r = await fetch(OLLAMA_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...EXTRA_HEADERS },
+      signal: controller.signal,
+      body: JSON.stringify({
+        model: MODEL_NAME,
+        messages: [
+          {
+            role: 'system',
+            content: 'You are a translator. Translate the user message into natural, fluent British English. Reply with ONLY the translation — no quotes, no prefix, no explanation. If the message is already English, return it unchanged.'
+          },
+          { role: 'user', content: trimmed }
+        ],
+        temperature: 0,
+        stream: false
+      })
+    });
+    clearTimeout(timeoutId);
+    if (!r.ok) return text;
+    const data = await r.json();
+    const out = data.choices?.[0]?.message?.content?.trim();
+    return out || text;
+  } catch (err) {
+    clearTimeout(timeoutId);
+    console.warn('[LLM] translate failed', err);
+    return text;
+  }
+}
+
+/**
  * Build the prompt for the model. We give it a list of factor names, a
  * short sliding window of recent utterances (for context — e.g. the
  * clinician's question that the current utterance is answering), and the
