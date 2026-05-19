@@ -12,7 +12,7 @@
   const STORAGE_VIEW = 'ambient-ui-view';
   const STORAGE_SEP_POS = 'ambient-ui-sep-pos';
   const STORAGE_TB_POS = 'ambient-ui-tb-pos';
-  const VIEWS = ['attached', 'separate'];
+  const VIEWS = ['attached', 'separate', 'components'];
 
   // Figma-extracted SVG symbols live in index.html (the static <defs> block
   // labelled "Figma-aligned symbols") so they're available on the
@@ -22,17 +22,18 @@
   const chip = document.createElement('div');
   chip.className = 'proto-chip';
   chip.setAttribute('role', 'group');
-  chip.setAttribute('aria-label', 'UI layout variant');
+  chip.setAttribute('aria-label', 'UI direction');
   chip.innerHTML = `
-    <span class="proto-chip__label">Layout</span>
+    <span class="proto-chip__label">Direction</span>
     <button class="proto-chip__btn" data-view="attached">Attached</button>
     <button class="proto-chip__btn" data-view="separate">Separate</button>
+    <button class="proto-chip__btn" data-view="components">Components</button>
   `;
   document.body.appendChild(chip);
 
   function setView(view) {
     if (!VIEWS.includes(view)) view = 'attached';
-    document.body.classList.remove('view-attached', 'view-separate');
+    document.body.classList.remove('view-attached', 'view-separate', 'view-components');
     document.body.classList.add(`view-${view}`);
     chip.querySelectorAll('[data-view]').forEach((b) => {
       b.classList.toggle('is-active', b.dataset.view === view);
@@ -126,6 +127,328 @@
   const aiSeparate = buildAiSurface('separate');
   toolbarWrap.appendChild(aiAttached);
   document.body.appendChild(aiSeparate);
+
+  // -------- 3b. Components gallery (Direction = Components) --------------
+  // Non-interactive showcase of the main building blocks. Each card holds a
+  // freshly-built static representation — IDs stripped so they don't clash
+  // with the live UI above. Buttons inside the cards are not wired up.
+  function buildAiPreview(variant, opts = {}) {
+    // Same markup as buildAiSurface but with display-state classes baked in
+    // (no live state machine). `opts.state` controls what's shown.
+    const state = opts.state || 'idle'; // idle | listening | paused
+    const meta = state !== 'idle' ? `<span class="proto-ai__primary-meta">${opts.timer || '0:00'}</span>` : '';
+    const label = state === 'listening' ? 'Stop listening'
+                : state === 'paused'    ? 'Resume listening'
+                : 'Start listening';
+    const showPause = state === 'listening' ? 'inline-flex' : 'none';
+    const recState = state === 'listening' ? 'is-rec-on is-rec-breath'
+                   : state === 'paused'    ? 'is-rec-on'
+                   : '';
+    const barHeights = state === 'listening' ? [9, 13, 5, 8, 6]
+                     : state === 'paused'    ? [9, 13, 5, 8, 6]
+                     : [3, 3, 3, 3, 3];
+    const barOpacity = state === 'idle' ? '0' : '1';
+    const barColor = state === 'paused' ? '#B0AC97' : '#5CA246';
+
+    return `
+      <div class="proto-ai proto-ai--${variant} proto-ai--preview">
+        <div class="proto-ai__container">
+          <div class="proto-ai__row">
+            <button class="proto-ai__pill proto-ai__pause" style="display:${showPause}">
+              <svg class="proto-ai__ic"><use href="#fic-pause-sm"/></svg>
+            </button>
+            <button class="proto-ai__pill proto-ai__primary">
+              <span class="proto-ai__rec ${recState}"></span>
+              <span class="proto-ai__primary-label">${label}</span>
+              ${meta}
+            </button>
+            ${variant === 'separate' ? `<div class="proto-ai__grip"><svg class="proto-ai__ic"><use href="#fic-grip-v"/></svg></div>` : ''}
+          </div>
+          <div class="proto-ai__row proto-ai__row--device">
+            <div class="proto-ai__mic-row">
+              <svg class="proto-ai__ic"><use href="#fic-mic-sm"/></svg>
+              <span class="proto-ai__device">Microphone</span>
+              <div class="proto-ai__meter">
+                ${barHeights.map((h, i) => `<span data-band="${i}" style="height:${h}px;opacity:${barOpacity};background:${barColor}"></span>`).join('')}
+              </div>
+            </div>
+            <button class="proto-ai__phone">
+              <svg class="proto-ai__ic"><use href="#fic-phone-sm"/></svg>
+            </button>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  function buildToolbarPreview() {
+    return `
+      <div class="proto-toolbar proto-toolbar--preview">
+        <div class="proto-tb-wrap">
+          <div class="proto-tb-primary">
+            <button class="proto-tb-btn"><svg class="proto-tb-icon"><use href="#fic-patient"/></svg></button>
+            <button class="proto-tb-btn"><svg class="proto-tb-icon"><use href="#fic-dashboard"/></svg></button>
+            <button class="proto-tb-btn"><svg class="proto-tb-icon"><use href="#fic-inbox"/></svg></button>
+            <button class="proto-tb-btn"><svg class="proto-tb-icon"><use href="#fic-ask"/></svg></button>
+          </div>
+          <button class="proto-tb-btn proto-tb-menu">
+            <svg class="proto-tb-icon proto-tb-icon--menu"><use href="#fic-menu-cts"/></svg>
+          </button>
+          <div class="proto-tb-handle">
+            <span></span><span></span><span></span><span></span>
+            <span></span><span></span><span></span><span></span>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  function buildComponentsGallery() {
+    const root = document.createElement('div');
+    root.className = 'proto-components';
+    root.setAttribute('role', 'region');
+    root.setAttribute('aria-label', 'Components gallery');
+    root.innerHTML = `
+      <header class="proto-components__head">
+        <h1>Components</h1>
+        <p>Non-interactive previews of the main UI building blocks in this prototype. For reviewing surface inventory — not a behaviour spec.</p>
+      </header>
+
+      <article class="proto-comp">
+        <header class="proto-comp__head">
+          <h2>Toolbar</h2>
+          <p>Figma-aligned replica. Patient · Dashboard · Inbox · Ask · Menu, plus the 8-dot drag handle.</p>
+        </header>
+        <div class="proto-comp__stage proto-comp__stage--toolbar">
+          ${buildToolbarPreview()}
+        </div>
+        <footer class="proto-comp__foot">
+          <p><strong>States:</strong> default · hover · pressed (yellow ribbon + 1 px push) · keyboard focus · opened (darker tile, no ribbon) · disabled.</p>
+        </footer>
+      </article>
+
+      <article class="proto-comp">
+        <header class="proto-comp__head">
+          <h2>Ambient AI bar — Attached</h2>
+          <p>Docks flush under the toolbar when a patient is open. Same width as the toolbar.</p>
+        </header>
+        <div class="proto-comp__stage proto-comp__stage--ai">
+          <div class="proto-comp__ai-row">
+            <div class="proto-comp__ai-cell">
+              <span class="proto-comp__caption">Idle</span>
+              ${buildAiPreview('attached', { state: 'idle' })}
+            </div>
+            <div class="proto-comp__ai-cell">
+              <span class="proto-comp__caption">Listening</span>
+              ${buildAiPreview('attached', { state: 'listening', timer: '4:18' })}
+            </div>
+            <div class="proto-comp__ai-cell">
+              <span class="proto-comp__caption">Paused</span>
+              ${buildAiPreview('attached', { state: 'paused', timer: '4:18' })}
+            </div>
+          </div>
+        </div>
+        <footer class="proto-comp__foot">
+          <p><strong>States:</strong> idle · starting (300 ms) · listening (breathing) · paused (frozen) · stopping (300 ms fade).</p>
+        </footer>
+      </article>
+
+      <article class="proto-comp">
+        <header class="proto-comp__head">
+          <h2>Ambient AI bar — Separate</h2>
+          <p>Independent floating bar. Always visible. Has its own drag grip on the right.</p>
+        </header>
+        <div class="proto-comp__stage proto-comp__stage--ai">
+          <div class="proto-comp__ai-row">
+            <div class="proto-comp__ai-cell">
+              <span class="proto-comp__caption">Idle</span>
+              ${buildAiPreview('separate', { state: 'idle' })}
+            </div>
+            <div class="proto-comp__ai-cell">
+              <span class="proto-comp__caption">Listening</span>
+              ${buildAiPreview('separate', { state: 'listening', timer: '4:18' })}
+            </div>
+          </div>
+        </div>
+        <footer class="proto-comp__foot">
+          <p>Drag the grip on the right to reposition. Position persists across reloads.</p>
+        </footer>
+      </article>
+
+      <article class="proto-comp">
+        <header class="proto-comp__head">
+          <h2>Risk Summary modal</h2>
+          <p>Opens from the notification card's "Details" link after detections come in. Shows a summary header + a list of detected risk factors.</p>
+        </header>
+        <div class="proto-comp__stage proto-comp__stage--modal">
+          <div class="proto-comp__modal-preview proto-comp__modal-preview--summary">
+            <header class="patient-bar">
+              <span class="nhs-tag">NHS</span>
+              <span class="patient-id">123 456 7890</span>
+              <span class="patient-name"><span class="muted">Mr.</span> <strong>Willington, Albert</strong></span>
+              <span class="patient-meta-badge">M</span>
+              <span class="patient-meta">59yrs</span>
+              <span class="patient-meta">12 Nov 1967</span>
+              <button class="icon-btn icon-btn--light"><svg class="ic"><use href="#ic-close"/></svg></button>
+            </header>
+            <div class="modal-body">
+              <div class="summary-head">
+                <div class="summary-title-row">
+                  <svg class="ic ic--sparkles"><use href="#ic-sparkles"/></svg>
+                  <span class="eyebrow">RISK SUMMARY</span>
+                </div>
+                <h2>3 cancer signals identified</h2>
+                <p class="summary-lede">We found factors mentioned during the consultation that may indicate cancer risk. Review the evidence, then confirm or edit the factors in risk assessment.</p>
+              </div>
+              <div class="summary-list">
+                <div class="summary-card"><strong>Persistent cough</strong><p class="muted">"…this annoying little cough that hasn't gone away…"</p></div>
+                <div class="summary-card"><strong>Unintentional weight loss</strong><p class="muted">"…lost about a stone without trying…"</p></div>
+                <div class="summary-card"><strong>Haematuria</strong><p class="muted">"…urine looked pinkish yesterday…"</p></div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <footer class="proto-comp__foot">
+          <p>Currently lives at <code>#detailsOverlay</code> in <code>index.html</code>. Trigger: detection count &gt; 0.</p>
+        </footer>
+      </article>
+
+      <article class="proto-comp">
+        <header class="proto-comp__head">
+          <h2>Risk Assessment modal</h2>
+          <p>Multi-factor selection with search + A–Z navigation. Reached from the Summary modal via "Start risk assessment".</p>
+        </header>
+        <div class="proto-comp__stage proto-comp__stage--modal">
+          <div class="proto-comp__modal-preview proto-comp__modal-preview--ra">
+            <header class="patient-bar">
+              <svg class="ic ic--lg"><use href="#ic-butterfly"/></svg>
+              <span class="patient-name"><span class="muted">Mrs.</span> <strong>Stone, Emma</strong></span>
+              <span class="patient-meta">69yrs · 18 Jun 1955</span>
+              <span class="spacer"></span>
+              <span class="nhs-tag">NHS</span>
+              <span class="patient-id">271 212 7328</span>
+              <button class="icon-btn icon-btn--light"><svg class="ic"><use href="#ic-close"/></svg></button>
+            </header>
+            <div class="ra-body">
+              <div class="ra-selected-row">
+                <span class="proto-comp__chip">Persistent cough ✕</span>
+                <span class="proto-comp__chip">Weight loss ✕</span>
+              </div>
+              <div class="ra-toolbar">
+                <div class="ra-search">
+                  <svg class="ic"><use href="#ic-search"/></svg>
+                  <input type="search" placeholder="Type factors, symptoms, sign, or investigations" disabled />
+                </div>
+                <button class="btn btn--primary btn--large">Proceed <svg class="ic ic--sm"><use href="#ic-chevron"/></svg></button>
+              </div>
+            </div>
+          </div>
+        </div>
+        <footer class="proto-comp__foot">
+          <p>Currently lives at <code>#raOverlay</code>. Reached from the Summary's "Start risk assessment" CTA.</p>
+        </footer>
+      </article>
+
+      <article class="proto-comp">
+        <header class="proto-comp__head">
+          <h2>Mobile mic page</h2>
+          <p>Phone-side capture screen reached by scanning the QR in the Phone Connection modal. URL contains <code>?mic=&lt;peer-id&gt;</code>.</p>
+        </header>
+        <div class="proto-comp__stage proto-comp__stage--phone">
+          <div class="proto-phone-frame">
+            <div class="proto-phone-frame__notch"></div>
+            <div class="proto-phone-frame__screen">
+              <div class="mobile-mic proto-mobile-mic--preview">
+                <div class="mm-header">
+                  <svg class="ic ic--lg mm-logo-ic"><use href="#fic-menu-cts"/></svg>
+                  <strong>C the Signs — Ambient AI</strong>
+                </div>
+                <div class="mm-status">
+                  <span class="dot dot--connected"></span>
+                  <span>Connected to laptop</span>
+                </div>
+                <div class="mm-mic-area">
+                  <button class="mm-mic-btn">
+                    <svg class="ic ic--xl mm-mic-ic"><use href="#fic-mic-sm"/></svg>
+                    <span>Tap to listen</span>
+                  </button>
+                </div>
+                <div class="mm-transcript">
+                  <span class="muted">Transcript appears here as you speak.</span>
+                </div>
+                <p class="mm-footnote">Audio stays on this phone. Only the transcribed text is sent to the laptop.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+        <footer class="proto-comp__foot">
+          <p>Full-screen page when active. Container above is for preview only — the real page fills the whole viewport.</p>
+        </footer>
+      </article>
+
+      <article class="proto-comp">
+        <header class="proto-comp__head">
+          <h2>Status pill (dev utility)</h2>
+          <p>PoC-only control surface: transcript toggle, "New patient open" simulation, language picker, STT status line. Will not ship to production.</p>
+        </header>
+        <div class="proto-comp__stage proto-comp__stage--util">
+          <div class="proto-comp__status-pill">
+            <div class="status-pill-row">
+              <span class="status-feature">
+                <svg class="ic ic--sm"><use href="#ic-sparkles"/></svg>
+                Ambient AI <span class="poc-tag">PoC</span>
+              </span>
+              <span class="lang-picker-wrap">
+                <label class="lang-label">Patient speaks:</label>
+                <select class="lang-picker" disabled>
+                  <option>English</option>
+                </select>
+              </span>
+            </div>
+            <div class="status-pill-row status-pill-actions">
+              <button class="btn btn--ghost">Show transcript</button>
+              <button class="btn btn--primary">
+                <svg class="ic ic--sm"><use href="#ic-user-plus"/></svg>
+                New patient open
+              </button>
+            </div>
+            <div class="status-pill-note">Web Speech API ready · Click the mic button to begin</div>
+          </div>
+        </div>
+        <footer class="proto-comp__foot">
+          <p>Top-left of the viewport. Hidden in the Components direction.</p>
+        </footer>
+      </article>
+
+      <article class="proto-comp">
+        <header class="proto-comp__head">
+          <h2>Notification card</h2>
+          <p>Floats below the Patient button when detections come in. "Risk assess", "Details", "Hide" actions.</p>
+        </header>
+        <div class="proto-comp__stage proto-comp__stage--util">
+          <div class="proto-comp__notif">
+            <div class="notif-body">
+              <div class="notif-badge">3</div>
+              <div class="notif-content">
+                <div class="notif-title">3 risk factors detected</div>
+                <div class="notif-sub">Latest: Persistent cough · from the consultation</div>
+                <div class="notif-actions">
+                  <button class="link link--primary">Risk assess</button>
+                  <button class="link">Details</button>
+                  <button class="link">Hide</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <footer class="proto-comp__foot">
+          <p>Currently lives at <code>.notif</code> in <code>index.html</code>.</p>
+        </footer>
+      </article>
+    `;
+    return root;
+  }
+  document.body.appendChild(buildComponentsGallery());
 
   // -------- 4. State machine ---------------------------------------------
   // Single source of truth for the recording lifecycle:
